@@ -1,0 +1,148 @@
+---
+- name: Setup Local Container Registry
+  hosts: registry
+  become: true
+  vars:
+    registry_port: 5000
+    registry_storage_path: /var/lib/registry
+    registry_config_path: /etc/docker/registry
+
+  tasks:
+    - name: Create registry directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+      loop:
+        - "{{ registry_storage_path }}"
+        - "{{ registry_config_path }}"
+
+    - name: Create registry configuration
+      copy:
+        dest: "{{ registry_config_path }}/config.yml"
+        content: |
+          version: 0.1
+          log:
+            level: debug
+          storage:
+            filesystem:
+              rootdirectory: {{ registry_storage_path }}
+            delete:
+              enabled: true
+          http:
+            addr: :{{ registry_port }}
+            headers:
+              X-Content-Type-Options: [nosniff]
+          health:
+            storagedriver:
+              enabled: true
+              interval: 10s
+              threshold: 3
+
+    - name: Pull registry image
+      docker_image:
+        name: registry:2
+        source: pull
+        force_source: yes
+
+    - name: Create registry container
+      docker_container:
+        name: local-registry
+        image: registry:2
+        state: started
+        restart_policy: always
+        ports:
+          - "{{ registry_port }}:{{ registry_port }}"
+        volumes:
+          - "{{ registry_storage_path }}:/var/lib/registry"
+          - "{{ registry_config_path }}/config.yml:/etc/docker/registry/config.yml"
+        env:
+          REGISTRY_STORAGE_DELETE_ENABLED: "true"
+
+    - name: Wait for registry to be ready
+      wait_for:
+        port: "{{ registry_port }}"
+        timeout: 60
+
+    - name: Test registry connectivity
+      uri:
+        url: "http://localhost:{{ registry_port }}/v2/_catalog"
+        method: GET
+      register: registry_test
+
+    - name: Display registry test result
+      debug:
+        var: registry_test
+
+    - name: Create registry health check script
+      copy:
+        dest: /usr/local/bin/registry-health
+        content: |
+          #!/bin/bash
+          curl -f http://localhost:{{ registry_port }}/v2/_catalog || exit 1
+        mode: '0755'
+
+    - name: Create systemd service for registry
+      copy:
+        dest: /etc/systemd/system/local-registry.service
+        content: |
+          [Unit]
+          Description=Local Docker Registry
+          After=docker.service
+          Requires=docker.service
+          
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          ExecStart=/usr/bin/docker start local-registry
+          ExecStop=/usr/bin/docker stop local-registry
+          TimeoutStartSec=0
+          
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable and start registry service
+      systemd:
+        name: local-registry
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Configure Docker to trust local registry
+      lineinfile:
+        path: /etc/docker/daemon.json
+        create: yes
+        line: |
+          {
+            "insecure-registries": [
+              "localhost:{{ registry_port }}",
+              "registry.local:{{ registry_port }}",
+              "192.168.122.100:{{ registry_port }}"
+            ]
+          }
+        state: present
+
+    - name: Restart Docker daemon
+      systemd:
+        name: docker
+        state: restarted
+
+    - name: Wait for Docker to be ready
+      wait_for:
+        port: "{{ registry_port }}"
+        timeout: 60
+
+    - name: Display registry information
+      debug:
+        msg: |
+          Local registry setup completed successfully!
+          
+          Registry URL: http://registry.local:{{ registry_port }}
+          Storage Path: {{ registry_storage_path }}
+          Health Check: http://registry.local:{{ registry_port }}/v2/_catalog
+          
+          To test: curl http://registry.local:{{ registry_port }}/v2/_catalog
+
+

@@ -1,0 +1,25 @@
+[all:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=ssh/id_rsa
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+ansible_python_interpreter=/usr/bin/python3
+
+[k3s_servers]
+k3s-server ansible_host=192.168.122.10
+
+[k3s_workers]
+k3s-worker-1 ansible_host=192.168.122.11
+
+[k3s_cluster:children]
+k3s_servers
+k3s_workers
+
+[registry]
+registry.local ansible_host=192.168.122.100
+
+[offline_services]
+keycloak.local ansible_host=192.168.122.101
+gitea.local ansible_host=192.168.122.102
+postgres.local ansible_host=192.168.122.103
+
+

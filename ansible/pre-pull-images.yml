@@ -1,0 +1,128 @@
+---
+- name: Pre-pull and Push Essential Images
+  hosts: registry
+  become: true
+  vars:
+    registry_url: "registry.local:5000"
+    images_to_pull:
+      # K3s base images
+      - name: "rancher/klipper-helm"
+        tag: "v0.7.9-build20230406"
+        local_name: "{{ registry_url }}/rancher/klipper-helm:v0.7.9-build20230406"
+      
+      - name: "rancher/local-path-provisioner"
+        tag: "v0.0.24"
+        local_name: "{{ registry_url }}/rancher/local-path-provisioner:v0.0.24"
+      
+      - name: "rancher/mirrored-coredns-coredns"
+        tag: "1.10.1"
+        local_name: "{{ registry_url }}/rancher/mirrored-coredns-coredns:1.10.1"
+      
+      - name: "rancher/mirrored-metrics-server"
+        tag: "v0.6.4"
+        local_name: "{{ registry_url }}/rancher/mirrored-metrics-server:v0.6.4"
+      
+      # PostgreSQL (CloudNativePG)
+      - name: "ghcr.io/cloudnative-pg/postgresql"
+        tag: "15.5"
+        local_name: "{{ registry_url }}/cloudnative-pg/postgresql:15.5"
+      
+      - name: "ghcr.io/cloudnative-pg/cloudnative-pg"
+        tag: "1.20.1"
+        local_name: "{{ registry_url }}/cloudnative-pg/cloudnative-pg:1.20.1"
+      
+      # Keycloak
+      - name: "quay.io/keycloak/keycloak"
+        tag: "23.0.3"
+        local_name: "{{ registry_url }}/keycloak/keycloak:23.0.3"
+      
+      # Gitea
+      - name: "gitea/gitea"
+        tag: "1.21.4"
+        local_name: "{{ registry_url }}/gitea/gitea:1.21.4"
+      
+      # Linkerd
+      - name: "ghcr.io/linkerd/proxy"
+        tag: "2.13.4"
+        local_name: "{{ registry_url }}/linkerd/proxy:2.13.4"
+      
+      - name: "ghcr.io/linkerd/controller"
+        tag: "2.13.4"
+        local_name: "{{ registry_url }}/linkerd/controller:2.13.4"
+      
+      # ArgoCD
+      - name: "quay.io/argoproj/argocd"
+        tag: "v2.9.3"
+        local_name: "{{ registry_url }}/argoproj/argocd:v2.9.3"
+      
+      # Monitoring
+      - name: "prom/prometheus"
+        tag: "v2.48.0"
+        local_name: "{{ registry_url }}/prometheus/prometheus:v2.48.0"
+      
+      - name: "grafana/grafana"
+        tag: "10.2.0"
+        local_name: "{{ registry_url }}/grafana/grafana:10.2.0"
+      
+      # Registry
+      - name: "registry"
+        tag: "2"
+        local_name: "{{ registry_url }}/registry:2"
+
+  tasks:
+    - name: Wait for registry to be ready
+      wait_for:
+        port: 5000
+        timeout: 60
+
+    - name: Pre-pull and tag images
+      docker_image:
+        name: "{{ item.name }}:{{ item.tag }}"
+        source: pull
+        force_source: yes
+        tag: "{{ item.local_name }}"
+      loop: "{{ images_to_pull }}"
+      register: pull_results
+
+    - name: Push images to local registry
+      docker_image:
+        name: "{{ item.local_name }}"
+        push: yes
+        source: local
+      loop: "{{ images_to_pull }}"
+      register: push_results
+
+    - name: Verify images in local registry
+      uri:
+        url: "http://localhost:5000/v2/_catalog"
+        method: GET
+      register: registry_catalog
+
+    - name: Display registry catalog
+      debug:
+        var: registry_catalog.json
+
+    - name: Create image list file
+      copy:
+        dest: /opt/offline-images.txt
+        content: |
+          # Offline Images List
+          # Generated on {{ ansible_date_time.iso8601 }}
+          
+          {% for image in images_to_pull %}
+          {{ image.local_name }}
+          {% endfor %}
+          
+          Total Images: {{ images_to_pull | length }}
+
+    - name: Display completion message
+      debug:
+        msg: |
+          Image pre-pulling completed successfully!
+          
+          Total images processed: {{ images_to_pull | length }}
+          Registry URL: {{ registry_url }}
+          
+          To verify: curl http://{{ registry_url }}/v2/_catalog
+
+

@@ -1,0 +1,177 @@
+---
+- name: Setup K3s Cluster
+  hosts: k3s_cluster
+  become: true
+  vars:
+    k3s_version: "v1.28.5+k3s1"
+    k3s_token: "{{ lookup('password', '/dev/null length=64 chars=ascii_letters,digits') }}"
+    server_ip: "{{ hostvars['k3s-server']['ansible_default_ipv4']['address'] }}"
+    registry_url: "registry.local:5000"
+    offline_mode: true
+
+  tasks:
+    - name: Wait for cloud-init to complete
+      wait_for:
+        path: /var/lib/cloud/instance/boot-finished
+        timeout: 300
+      register: cloud_init_complete
+
+    - name: Verify Docker is running
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Verify containerd is running
+      systemd:
+        name: containerd
+        state: started
+        enabled: yes
+
+    - name: Create K3s directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+      loop:
+        - /var/lib/rancher/k3s
+        - /etc/rancher/k3s
+        - /opt/k3s
+
+    - name: Download K3s binary
+      get_url:
+        url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s"
+        dest: /usr/local/bin/k3s
+        mode: '0755'
+        timeout: 300
+      when: not offline_mode
+
+    - name: Copy K3s binary (offline mode)
+      copy:
+        src: "files/k3s-{{ k3s_version }}"
+        dest: /usr/local/bin/k3s
+        mode: '0755'
+        remote_src: false
+      when: offline_mode
+
+    - name: Download K3s images (online mode)
+      shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} sh -s - --write-kubeconfig-mode 644
+      when: not offline_mode
+
+    - name: Install K3s server
+      shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} sh -s - server \
+          --write-kubeconfig-mode 644 \
+          --token {{ k3s_token }} \
+          --tls-san {{ server_ip }} \
+          --disable traefik \
+          --disable servicelb \
+          --disable-cloud-controller \
+          --disable-network-policy \
+          --disable-helm-controller \
+          --disable local-storage \
+          --node-label "node-role.kubernetes.io/server=true" \
+          --node-label "node-role.kubernetes.io/control-plane=true"
+      when: 
+        - inventory_hostname in groups['k3s_servers']
+        - not offline_mode
+
+    - name: Install K3s server (offline mode)
+      shell: |
+        INSTALL_K3S_VERSION={{ k3s_version }} \
+        INSTALL_K3S_EXEC="server \
+          --write-kubeconfig-mode 644 \
+          --token {{ k3s_token }} \
+          --tls-san {{ server_ip }} \
+          --disable traefik \
+          --disable servicelb \
+          --disable-cloud-controller \
+          --disable-network-policy \
+          --disable-helm-controller \
+          --disable local-storage \
+          --node-label 'node-role.kubernetes.io/server=true' \
+          --node-label 'node-role.kubernetes.io/control-plane=true'" \
+        /usr/local/bin/k3s-install.sh
+      when: 
+        - inventory_hostname in groups['k3s_servers']
+        - offline_mode
+
+    - name: Wait for K3s server to be ready
+      wait_for:
+        port: 6443
+        host: "{{ server_ip }}"
+        timeout: 300
+      when: inventory_hostname in groups['k3s_servers']
+
+    - name: Get K3s server token
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: server_token
+      when: inventory_hostname in groups['k3s_servers']
+
+    - name: Install K3s agent
+      shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} sh -s - agent \
+          --server https://{{ server_ip }}:6443 \
+          --token {{ server_token.content | b64decode | trim }} \
+          --node-label "node-role.kubernetes.io/worker=true"
+      when: 
+        - inventory_hostname in groups['k3s_workers']
+        - not offline_mode
+
+    - name: Install K3s agent (offline mode)
+      shell: |
+        INSTALL_K3S_VERSION={{ k3s_version }} \
+        INSTALL_K3S_EXEC="agent \
+          --server https://{{ server_ip }}:6443 \
+          --token {{ server_token.content | b64decode | trim }} \
+          --node-label 'node-role.kubernetes.io/worker=true'" \
+        /usr/local/bin/k3s-install.sh
+      when: 
+        - inventory_hostname in groups['k3s_workers']
+        - offline_mode
+
+    - name: Wait for K3s agent to join
+      wait_for:
+        path: /var/lib/rancher/k3s/agent/etc/kubelet.conf
+        timeout: 300
+      when: inventory_hostname in groups['k3s_workers']
+
+    - name: Configure K3s to use local registry
+      lineinfile:
+        path: /etc/rancher/k3s/registries.yaml
+        create: yes
+        line: |
+          configs:
+            "{{ registry_url }}":
+              tls:
+                insecure_skip_verify: true
+        state: present
+
+    - name: Restart K3s to apply registry config
+      systemd:
+        name: "{{ 'k3s' if inventory_hostname in groups['k3s_servers'] else 'k3s-agent' }}"
+        state: restarted
+
+    - name: Wait for K3s to be ready
+      wait_for:
+        port: 6443
+        host: "{{ server_ip }}"
+        timeout: 300
+      when: inventory_hostname in groups['k3s_servers']
+
+    - name: Verify cluster nodes
+      shell: |
+        kubectl get nodes --kubeconfig /etc/rancher/k3s/k3s.yaml
+      register: cluster_nodes
+      when: inventory_hostname in groups['k3s_servers']
+
+    - name: Display cluster nodes
+      debug:
+        var: cluster_nodes.stdout_lines
+      when: inventory_hostname in groups['k3s_servers']
+
+
