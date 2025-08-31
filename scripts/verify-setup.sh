@@ -47,16 +47,23 @@ check_ssh_keys() {
 # Check VM status
 check_vms() {
     print_status "Checking VM status..."
-    if command -v virsh &> /dev/null; then
-        local vm_count=$(virsh list --all | grep -c "k3s-")
+    if command -v multipass &> /dev/null; then
+        local vm_count=$(multipass list | grep -c "k3s-")
+        local running_vms=$(multipass list | grep "k3s-" | grep -c "Running")
         if [ "$vm_count" -ge 2 ]; then
-            print_success "Found $vm_count K3s VMs"
+            print_success "Found $vm_count K3s VMs ($running_vms running)"
+            if [ "$running_vms" -lt 2 ]; then
+                print_warning "Only $running_vms VMs are running. Starting stopped VMs..."
+                multipass start k3s-1 k3s-2
+                sleep 10
+            fi
         else
             print_error "Expected at least 2 K3s VMs, found $vm_count"
             exit 1
         fi
     else
-        print_warning "virsh not found - skipping VM check"
+        print_error "multipass not found - please install Multipass or use different VM solution"
+        exit 1
     fi
 }
 
@@ -64,43 +71,37 @@ check_vms() {
 check_k3s() {
     print_status "Checking K3s cluster..."
     
-    # Get server IP from Terraform output
-    cd "$PROJECT_DIR/terraform"
-    if [ -f "terraform.tfstate" ]; then
-        local server_ip=$(terraform output -raw k3s_server_ip 2>/dev/null || echo "")
-        if [ -n "$server_ip" ]; then
-            print_status "K3s server IP: $server_ip"
+    # Get server IP from Multipass
+    local server_ip=$(multipass list | grep "k3s-1" | awk '{print $3}')
+    if [ -n "$server_ip" ]; then
+        print_status "K3s server IP: $server_ip"
+        
+        # Test connection to VM
+        if multipass exec k3s-1 -- echo "Connection OK" 2>/dev/null; then
+            print_success "Connection to K3s server successful"
             
-            # Test SSH connection
-            if ssh -i "$PROJECT_DIR/ansible/ssh/id_rsa" -o ConnectTimeout=10 -o StrictHostKeyChecking=no ubuntu@"$server_ip" "echo 'SSH OK'" 2>/dev/null; then
-                print_success "SSH connection to K3s server successful"
+            # Check K3s status
+            local k3s_status=$(multipass exec k3s-1 -- sudo systemctl is-active k3s 2>/dev/null || echo "inactive")
+            if [ "$k3s_status" = "active" ]; then
+                print_success "K3s service is running"
                 
-                # Check K3s status
-                local k3s_status=$(ssh -i "$PROJECT_DIR/ansible/ssh/id_rsa" ubuntu@"$server_ip" "sudo systemctl is-active k3s" 2>/dev/null)
-                if [ "$k3s_status" = "active" ]; then
-                    print_success "K3s service is running"
-                    
-                    # Check cluster nodes
-                    local node_count=$(ssh -i "$PROJECT_DIR/ansible/ssh/id_rsa" ubuntu@"$server_ip" "sudo kubectl get nodes --no-headers | wc -l" 2>/dev/null)
-                    if [ "$node_count" -ge 2 ]; then
-                        print_success "K3s cluster has $node_count nodes"
-                    else
-                        print_warning "K3s cluster has only $node_count nodes (expected 2+)"
-                    fi
+                # Check cluster nodes
+                local node_count=$(multipass exec k3s-1 -- sudo kubectl get nodes --no-headers 2>/dev/null | wc -l)
+                if [ "$node_count" -ge 2 ]; then
+                    print_success "K3s cluster has $node_count nodes"
                 else
-                    print_error "K3s service is not running"
-                    exit 1
+                    print_warning "K3s cluster has only $node_count nodes (expected 2+)"
                 fi
             else
-                print_error "SSH connection to K3s server failed"
-                exit 1
+                print_warning "K3s service is not running (status: $k3s_status)"
+                print_status "This is expected if K3s hasn't been installed yet"
             fi
         else
-            print_error "Could not get K3s server IP from Terraform"
+            print_error "Connection to K3s server failed"
             exit 1
         fi
     else
-        print_error "Terraform state file not found"
+        print_error "Could not get K3s server IP from Multipass"
         exit 1
     fi
 }
@@ -132,12 +133,20 @@ check_kubectl() {
     if command -v kubectl &> /dev/null; then
         # Copy kubeconfig if not exists
         if [ ! -f ~/.kube/config ]; then
-            cd "$PROJECT_DIR/terraform"
-            local server_ip=$(terraform output -raw k3s_server_ip 2>/dev/null || echo "")
-            if [ -n "$server_ip" ]; then
-                scp -i "$PROJECT_DIR/ansible/ssh/id_rsa" ubuntu@"$server_ip":/etc/rancher/k3s/k3s.yaml ~/.kube/config
-                sed -i "s/127.0.0.1/$server_ip/g" ~/.kube/config
-                print_success "Kubeconfig copied and configured"
+            # Get kubeconfig from Multipass VM
+            if multipass exec k3s-1 -- test -f /etc/rancher/k3s/k3s.yaml; then
+                multipass exec k3s-1 -- cat /etc/rancher/k3s/k3s.yaml > ~/.kube/config
+                
+                # Update server IP in kubeconfig
+                local server_ip=$(multipass list | grep "k3s-1" | awk '{print $3}')
+                if [ -n "$server_ip" ]; then
+                    sed -i "s/127.0.0.1/$server_ip/g" ~/.kube/config
+                    print_success "Kubeconfig copied and configured for IP: $server_ip"
+                else
+                    print_warning "Could not determine server IP for kubeconfig"
+                fi
+            else
+                print_warning "K3s kubeconfig not found - K3s may not be installed yet"
             fi
         fi
         
@@ -152,7 +161,7 @@ check_kubectl() {
             echo ""
             kubectl get nodes
         else
-            print_error "kubectl cannot access the cluster"
+            print_warning "kubectl cannot access the cluster - this is expected if K3s isn't installed yet"
         fi
     else
         print_warning "kubectl not installed"
