@@ -66,6 +66,27 @@ async fn main() -> std::io::Result<()> {
                     }
                 }))
             }))
+            .service(
+                web::scope("/api")
+                    .service(handlers::auth::register)
+                    .service(handlers::auth::login)
+                    .service(
+                        web::scope("/users")
+                            .service(handlers::users::get_users)
+                            .service(handlers::users::get_user)
+                            .service(handlers::users::create_user)
+                            .service(handlers::users::update_user)
+                            .service(handlers::users::delete_user),
+                    )
+                    .service(
+                        web::scope("/tasks")
+                            .service(handlers::tasks::get_tasks)
+                            .service(handlers::tasks::get_task)
+                            .service(handlers::tasks::create_task)
+                            .service(handlers::tasks::update_task)
+                            .service(handlers::tasks::delete_task),
+                    ),
+            )
     })
     .bind(bind_address)?
     .run()
