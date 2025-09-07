@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rust-api-config
+  namespace: k3s-lab
+data:
+  DATABASE_URL: "postgresql://postgres:password@postgres-service:5432/k3s_lab"
+  RUST_LOG: "info"
+  PORT: "8080"
+  JWT_SECRET: "your-super-secret-jwt-key-change-this-in-production"

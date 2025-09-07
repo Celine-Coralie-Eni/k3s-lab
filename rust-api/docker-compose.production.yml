@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: k3s_lab_postgres_prod
+    environment:
+      POSTGRES_DB: k3s_lab_api
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - k3s_lab_network
+
+  # Rust API Application
+  api:
+    image: localhost:5000/k3s-lab-api:latest
+    container_name: k3s_lab_api_prod
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/k3s_lab_api
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production}
+      RUST_LOG: ${RUST_LOG:-info}
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - k3s_lab_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Local Docker Registry (for offline deployment)
+  registry:
+    image: registry:2
+    container_name: k3s_lab_registry
+    ports:
+      - "5000:5000"
+    volumes:
+      - registry_data:/var/lib/registry
+    restart: unless-stopped
+    networks:
+      - k3s_lab_network
+
+  # Nginx Reverse Proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: k3s_lab_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - k3s_lab_network
+
+volumes:
+  postgres_data:
+    driver: local
+  registry_data:
+    driver: local
+
+networks:
+  k3s_lab_network:
+    driver: bridge

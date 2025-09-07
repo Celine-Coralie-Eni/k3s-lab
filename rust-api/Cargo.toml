@@ -1,0 +1,48 @@
+[package]
+name = "k3s-lab-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework
+actix-web = "4.4"
+actix-rt = "2.9"
+
+# Database
+diesel = { version = "2.1", features = ["postgres", "chrono", "uuid", "r2d2"] }
+diesel_migrations = "2.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Environment and configuration
+dotenvy = "0.15"
+config = "0.14"
+
+# Logging
+env_logger = "0.10"
+log = "0.4"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Authentication
+jsonwebtoken = "9.2"
+bcrypt = "0.15"
+
+# CORS
+actix-cors = "0.6"
+
+# Validation
+validator = { version = "0.16", features = ["derive"] }
+
+[dev-dependencies]
+tokio-test = "0.4"

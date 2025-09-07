@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: k3s_lab_postgres_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: k3s_lab_api
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your_secure_password_here}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - k3s_lab_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  rust-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: k3s_lab_rust_api
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:-your_secure_password_here}@postgres:5432/k3s_lab_api
+      - JWT_SECRET=${JWT_SECRET:-your_super_secret_jwt_key_change_this_in_production}
+      - PORT=8080
+      - RUST_LOG=info
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - k3s_lab_network
+    volumes:
+      - ./logs:/app/logs
+
+  # Optional: pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: k3s_lab_pgadmin_prod
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    ports:
+      - "8081:80"
+    depends_on:
+      - postgres
+    networks:
+      - k3s_lab_network
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  # Optional: Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: k3s_lab_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - rust-api
+    networks:
+      - k3s_lab_network
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  k3s_lab_network:
+    driver: bridge
+
+

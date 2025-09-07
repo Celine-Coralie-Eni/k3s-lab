@@ -1,0 +1,18 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg-cluster
+  namespace: k3s-lab
+spec:
+  instances: 1
+  primaryUpdateStrategy: unsupervised
+  imageName: ghcr.io/cloudnative-pg/postgresql:15.5
+  storage:
+    size: 5Gi
+    storageClass: local-path
+  postgresql:
+    parameters:
+      shared_buffers: "256MB"
+      max_connections: "100"
+  monitoring:
+    enablePodMonitor: false

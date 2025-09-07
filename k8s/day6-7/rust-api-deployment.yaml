@@ -1,0 +1,163 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rust-api
+  namespace: k3s-lab
+  labels:
+    app: rust-api
+    component: api
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: rust-api
+  template:
+    metadata:
+      labels:
+        app: rust-api
+        component: api
+    spec:
+      containers:
+      - name: rust-api
+        image: docker.io/library/k3s-lab-api:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-db-url
+              key: DATABASE_URL
+        - name: RUST_LOG
+          valueFrom:
+            configMapKeyRef:
+              name: rust-api-config
+              key: RUST_LOG
+        - name: RUST_BACKTRACE
+          valueFrom:
+            configMapKeyRef:
+              name: rust-api-config
+              key: RUST_BACKTRACE
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: rust-api-config
+              key: PORT
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: rust-api-secret
+              key: JWT_SECRET
+        - name: JWT_EXPIRATION_HOURS
+          valueFrom:
+            configMapKeyRef:
+              name: rust-api-config
+              key: JWT_EXPIRATION_HOURS
+        - name: API_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: rust-api-config
+              key: API_HOST
+        - name: API_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: rust-api-config
+              key: API_PORT
+        - name: CORS_ORIGIN
+          valueFrom:
+            configMapKeyRef:
+              name: rust-api-config
+              key: CORS_ORIGIN
+        - name: CORS_METHODS
+          valueFrom:
+            configMapKeyRef:
+              name: rust-api-config
+              key: CORS_METHODS
+        - name: CORS_HEADERS
+          valueFrom:
+            configMapKeyRef:
+              name: rust-api-config
+              key: CORS_HEADERS
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 10
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rust-api-service
+  namespace: k3s-lab
+  labels:
+    app: rust-api
+    component: api
+spec:
+  selector:
+    app: rust-api
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rust-api-headless
+  namespace: k3s-lab
+  labels:
+    app: rust-api
+    component: api
+spec:
+  clusterIP: None
+  selector:
+    app: rust-api
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
