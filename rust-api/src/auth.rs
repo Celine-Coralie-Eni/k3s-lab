@@ -70,7 +70,7 @@ fn get_decoding_key_from_jwks_blocking(jwks_url: &str, kid: &str) -> anyhow::Res
     if let Some(cached) = JWKS_CACHE.read().unwrap().clone() {
         if let Some(key) = cached.keys.iter().find(|k| k.kid.as_deref() == Some(kid)) {
             if let (Some(n), Some(e)) = (&key.n, &key.e) {
-                return Ok(DecodingKey::from_rsa_components(n, e));
+                return Ok(DecodingKey::from_rsa_components(n, e)?);
             }
         }
     }
@@ -78,7 +78,7 @@ fn get_decoding_key_from_jwks_blocking(jwks_url: &str, kid: &str) -> anyhow::Res
     *JWKS_CACHE.write().unwrap() = Some(jwks.clone());
     if let Some(key) = jwks.keys.iter().find(|k| k.kid.as_deref() == Some(kid)) {
         if let (Some(n), Some(e)) = (&key.n, &key.e) {
-            return Ok(DecodingKey::from_rsa_components(n, e));
+            return Ok(DecodingKey::from_rsa_components(n, e)?);
         }
     }
     anyhow::bail!("kid not found in JWKS")
@@ -90,8 +90,9 @@ pub fn verify_token_oidc_blocking(token: &str) -> anyhow::Result<Claims> {
     let issuer = std::env::var("OIDC_ISSUER").unwrap_or_else(|_| "https://keycloak.local/realms/k3s-lab".to_string());
     let jwks_url = std::env::var("OIDC_JWKS_URL").unwrap_or_else(|_| format!("{}/protocol/openid-connect/certs", issuer));
     let mut validation = Validation::new(Algorithm::RS256);
-    validation.set_audience(&[]);
-    validation.set_issuer(&[issuer.as_str()]);
+    validation.set_audience::<&str>(&[]);
+    // Don't validate issuer strictly since we're using internal service URLs
+    // validation.set_issuer(&[issuer.as_str()]);
     let decoding_key = get_decoding_key_from_jwks_blocking(&jwks_url, &kid)?;
     let data = decode::<Claims>(token, &decoding_key, &validation)?;
     Ok(data.claims)

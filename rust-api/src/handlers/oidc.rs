@@ -1,7 +1,6 @@
 use actix_web::{dev::Payload, Error as ActixError, FromRequest, HttpRequest};
 use futures_util::future::{ready, Ready};
 
-use crate::auth::verify_token_oidc;
 
 #[derive(Clone, Debug)]
 pub struct OidcUser {
@@ -27,7 +26,7 @@ impl FromRequest for OidcUser {
         // Note: actix extractors are sync; for simplicity, do quick verify in blocking fashion via tokio handle
         // In production, implement a proper async extractor.
         let res = tokio::runtime::Handle::current().block_on(async move {
-            verify_token_oidc(&token).await
+            crate::auth::verify_token_oidc_blocking(&token)
         });
 
         match res {
