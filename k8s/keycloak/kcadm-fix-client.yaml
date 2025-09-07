@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-fix-client
+  namespace: keycloak
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kcadm
+          image: quay.io/keycloak/keycloak:24.0.5
+          envFrom:
+            - secretRef:
+                name: keycloak-admin
+          command: ["/bin/bash","-c"]
+          args:
+            - |
+              set -e
+              echo "Waiting for Keycloak..."
+              until /opt/keycloak/bin/kcadm.sh config credentials --server http://keycloak.keycloak.svc.cluster.local \
+                --realm master --user ${KEYCLOAK_ADMIN} --password ${KEYCLOAK_ADMIN_PASSWORD}; do
+                echo "not ready, retrying"; sleep 5; done
+
+              echo "Ensuring client lab-api is public with direct access grants..."
+              CID=$(/opt/keycloak/bin/kcadm.sh get clients -r lab -q clientId=lab-api --fields id | sed -n 's/.*\"id\" *: *\"\([^\"]*\)\".*/\1/p' | head -n1)
+              if [ -z "$CID" ]; then
+                echo "Client not found; creating..."
+                /opt/keycloak/bin/kcadm.sh create clients -r lab \
+                  -s clientId=lab-api -s enabled=true -s protocol=openid-connect \
+                  -s standardFlowEnabled=true -s directAccessGrantsEnabled=true \
+                  -s serviceAccountsEnabled=false -s publicClient=true \
+                  -s redirectUris='["http://localhost:8088/*","http://keycloak.local/*"]'
+              else
+                echo "Updating client $CID"
+                /opt/keycloak/bin/kcadm.sh update clients/$CID -r lab \
+                  -s publicClient=true -s directAccessGrantsEnabled=true -s enabled=true -s standardFlowEnabled=true \
+                  -s redirectUris='["http://localhost:8088/*","http://keycloak.local/*"]'
+              fi
+              echo "Done."
+
+

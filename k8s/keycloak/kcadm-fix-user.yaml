@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-fix-user
+  namespace: keycloak
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kcadm
+          image: quay.io/keycloak/keycloak:24.0.5
+          envFrom:
+            - secretRef:
+                name: keycloak-admin
+          command: ["/bin/bash","-c"]
+          args:
+            - |
+              set -e
+              echo "Waiting for Keycloak..."
+              until /opt/keycloak/bin/kcadm.sh config credentials --server http://keycloak.keycloak.svc.cluster.local \
+                --realm master --user ${KEYCLOAK_ADMIN} --password ${KEYCLOAK_ADMIN_PASSWORD}; do
+                echo "not ready, retrying"; sleep 5; done
+
+              echo "Fixing user tester in realm lab..."
+              USER_ID=$(/opt/keycloak/bin/kcadm.sh get users -r lab -q username=tester --fields id | sed -n 's/.*\"id\" *: *\"\([^\"]*\)\".*/\1/p' | head -n1)
+              if [ -z "$USER_ID" ]; then echo "User tester not found"; exit 1; fi
+              /opt/keycloak/bin/kcadm.sh update users/$USER_ID -r lab \
+                -s enabled=true -s emailVerified=true -s requiredActions=[]
+              echo "Done."
+
+
