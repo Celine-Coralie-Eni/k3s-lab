@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitea-runner
+  namespace: gitea
+  labels:
+    app: gitea-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitea-runner
+  template:
+    metadata:
+      labels:
+        app: gitea-runner
+    spec:
+      containers:
+      - name: runner
+        image: gitea/act_runner:latest
+        env:
+        - name: GITEA_INSTANCE_URL
+          value: "http://gitea.gitea.svc.cluster.local:3000"
+        - name: GITEA_RUNNER_REGISTRATION_TOKEN
+          value: "dummy-token"  # We'll update this
+        - name: GITEA_RUNNER_NAME
+          value: "k8s-runner"
+        command: ["sh", "-c"]
+        args:
+        - |
+          # Wait for Gitea to be ready
+          until wget -q --spider http://gitea.gitea.svc.cluster.local:3000/api/v1/version; do
+            echo "Waiting for Gitea..."
+            sleep 5
+          done
+          
+          # Get registration token using wget instead of curl
+          TOKEN=$(wget -qO- "http://gitea.gitea.svc.cluster.local:3000/api/v1/actions/runners/registration-token" \
+            --http-user=admin --http-password=admin123 | jq -r '.token')
+          
+          if [ "$TOKEN" != "null" ] && [ -n "$TOKEN" ]; then
+            echo "Got token: $TOKEN"
+            # Register runner
+            /usr/local/bin/act_runner register \
+              --instance http://gitea.gitea.svc.cluster.local:3000 \
+              --token $TOKEN \
+              --name k8s-runner \
+              --labels ubuntu-latest:docker://node:16-bullseye
+          else
+            echo "Failed to get registration token"
+            exit 1
+          fi
+          
+          # Start runner
+          /usr/local/bin/act_runner daemon
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: runner-data
+          mountPath: /data
+      volumes:
+      - name: runner-data
+        emptyDir: {}
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gitea-runner
+  namespace: gitea
+spec:
+  selector:
+    app: gitea-runner
+  ports:
+  - port: 80
+    targetPort: 8080
