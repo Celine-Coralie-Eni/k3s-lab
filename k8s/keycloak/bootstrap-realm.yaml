@@ -18,8 +18,7 @@ spec:
               value: lab
             - name: CLIENT_ID
               value: lab-api
-            - name: CLIENT_SECRET
-              value: lab-secret
+            # Using public client; no secret required
             - name: TEST_USER
               value: tester
             - name: TEST_PASS
@@ -55,20 +54,19 @@ spec:
                 /opt/keycloak/bin/kcadm.sh create clients -r ${REALM} \
                   -s clientId=${CLIENT_ID} -s enabled=true -s protocol=openid-connect \
                   -s standardFlowEnabled=true -s directAccessGrantsEnabled=true -s serviceAccountsEnabled=false \
-                  -s publicClient=false -s redirectUris='["http://localhost:8080/*","http://keycloak.local/*"]'
-              fi
-
-              CLIENT_UUID=$(/opt/keycloak/bin/kcadm.sh get clients -r ${REALM} -q clientId=${CLIENT_ID} --fields id | jq -r '.[0].id')
-              if [ -n "${CLIENT_UUID}" ] && [ "${CLIENT_UUID}" != "null" ]; then
-                # Set client secret
-                /opt/keycloak/bin/kcadm.sh update clients/${CLIENT_UUID} -r ${REALM} -s 'secret=${CLIENT_SECRET}' -n || true
+                  -s publicClient=true -s redirectUris='["http://localhost:8080/*","http://keycloak.local/*"]'
               fi
 
               # Create test user
               if ! /opt/keycloak/bin/kcadm.sh get users -r ${REALM} -q username=${TEST_USER} | grep -q '"id"'; then
                 /opt/keycloak/bin/kcadm.sh create users -r ${REALM} -s username=${TEST_USER} -s enabled=true
-                USER_ID=$(/opt/keycloak/bin/kcadm.sh get users -r ${REALM} -q username=${TEST_USER} --fields id | jq -r '.[0].id')
+              fi
+              USER_ID=$(/opt/keycloak/bin/kcadm.sh get users -r ${REALM} -q username=${TEST_USER} --fields id | sed -n 's/.*"id" *: *"\([^"]*\)".*/\1/p' | head -n1)
+              if [ -n "${USER_ID}" ]; then
                 /opt/keycloak/bin/kcadm.sh set-password -r ${REALM} --userid ${USER_ID} --new-password ${TEST_PASS}
+              else
+                echo "Failed to determine user id for ${TEST_USER}" >&2
+                exit 1
               fi
 
               echo "Bootstrap complete."
