@@ -4,7 +4,6 @@ metadata:
   name: rust-api-ingress
   namespace: k3s-lab
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   rules:
   - host: api.k3s-lab.local

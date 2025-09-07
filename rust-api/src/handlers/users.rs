@@ -35,7 +35,7 @@ fn get_current_user_id(req: &HttpRequest) -> Result<Uuid, HttpResponse> {
     }
 }
 
-#[get("")]
+#[get("/")]
 pub async fn get_users(pool: web::Data<DbPool>, req: HttpRequest) -> impl Responder {
     let _current_user_id = match get_current_user_id(&req) {
         Ok(id) => id,
@@ -99,7 +99,7 @@ pub async fn get_user(
     }))
 }
 
-#[post("")]
+#[post("/")]
 pub async fn create_user(
     pool: web::Data<DbPool>,
     req: HttpRequest,

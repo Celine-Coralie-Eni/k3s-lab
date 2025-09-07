@@ -34,7 +34,7 @@ fn get_current_user_id(req: &HttpRequest) -> Result<Uuid, HttpResponse> {
     }
 }
 
-#[get("")]
+#[get("/")]
 pub async fn get_tasks(pool: web::Data<DbPool>, req: HttpRequest) -> impl Responder {
     let current_user_id = match get_current_user_id(&req) {
         Ok(id) => id,
@@ -102,7 +102,7 @@ pub async fn get_task(
     }))
 }
 
-#[post("")]
+#[post("/")]
 pub async fn create_task(
     pool: web::Data<DbPool>,
     req: HttpRequest,
