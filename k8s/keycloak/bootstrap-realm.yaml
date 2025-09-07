@@ -31,12 +31,19 @@ spec:
           args:
             - |
               set -e
-              echo "Waiting for Keycloak..."
-              until curl -sf ${KEYCLOAK_URL}/health/ready >/dev/null; do sleep 5; done
-              echo "Keycloak is ready. Configuring..."
-
-              /opt/keycloak/bin/kcadm.sh config credentials --server ${KEYCLOAK_URL} \
-                --realm master --user ${KEYCLOAK_ADMIN} --password ${KEYCLOAK_ADMIN_PASSWORD}
+              echo "Waiting for Keycloak using kcadm retries..."
+              ATTEMPTS=0
+              until /opt/keycloak/bin/kcadm.sh config credentials --server ${KEYCLOAK_URL} \
+                --realm master --user ${KEYCLOAK_ADMIN} --password ${KEYCLOAK_ADMIN_PASSWORD}; do
+                ATTEMPTS=$((ATTEMPTS+1))
+                if [ $ATTEMPTS -ge 60 ]; then
+                  echo "Keycloak not ready after 60 attempts"
+                  exit 1
+                fi
+                echo "Keycloak not ready yet, retrying ($ATTEMPTS)..."
+                sleep 5
+              done
+              echo "Authenticated to Keycloak. Configuring..."
 
               # Create realm if missing
               if ! /opt/keycloak/bin/kcadm.sh get realms/${REALM} >/dev/null 2>&1; then
