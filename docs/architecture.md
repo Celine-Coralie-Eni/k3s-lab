@@ -1,273 +1,169 @@
-# K3s Lab Architecture
+# 🏗️ Architecture Documentation
 
-## System Overview
-
-This document describes the architecture of the K3s lab infrastructure, designed to run completely offline with all necessary services for the assignment.
-
-## High-Level Architecture
+## System Architecture Overview
 
 ```mermaid
 graph TB
-    subgraph "Local Host"
-        TF[Terraform]
-        ANS[Ansible]
-        DOCKER[Docker]
-        REG[Local Registry]
+    subgraph "Infrastructure Layer"
+        TF[Terraform] --> ANS[Ansible]
+        ANS --> K3S[K3s Cluster]
     end
     
-    subgraph "K3s Cluster"
-        subgraph "Control Plane"
-            K3S_SERVER[K3s Server]
-            KEYCLOAK[Keycloak]
-            GITEA[Gitea]
-            ARGOCD[ArgoCD]
-        end
-        
-        subgraph "Worker Nodes"
-            K3S_WORKER1[K3s Worker 1]
-            K3S_WORKER2[K3s Worker 2]
-            POSTGRES[PostgreSQL]
-            APP[Your Rust App]
-        end
+    subgraph "Platform Layer"
+        K3S --> ARGO[ArgoCD]
+        K3S --> LINKERD[Linkerd Service Mesh]
+        K3S --> KEYCLOAK[Keycloak Auth]
+        K3S --> GITEA[Gitea Git Server]
     end
     
-    subgraph "Service Mesh"
-        LINKERD[Linkerd]
-        PROXY[Proxy Sidecar]
+    subgraph "Application Layer"
+        ARGO --> APP1[Hello World App]
+        ARGO --> APP2[Rust API]
+        ARGO --> APP3[Guestbook App]
     end
     
-    TF --> ANS
-    ANS --> K3S_SERVER
-    ANS --> K3S_WORKER1
-    DOCKER --> REG
-    REG --> K3S_SERVER
-    REG --> K3S_WORKER1
+    subgraph "Security & Observability"
+        LINKERD --> MTLS[mTLS Encryption]
+        LINKERD --> VIZ[Linkerd Viz]
+        KEYCLOAK --> JWT[JWT Tokens]
+    end
+```
+
+## Detailed Component Architecture
+
+```mermaid
+graph LR
+    subgraph "VM Layer"
+        VM1[k3s-1<br/>Master Node]
+        VM2[k3s-2<br/>Worker Node]
+        VM3[k3s-3<br/>Worker Node]
+    end
     
-    K3S_SERVER --> KEYCLOAK
-    K3S_SERVER --> GITEA
-    K3S_SERVER --> ARGOCD
-    K3S_WORKER1 --> POSTGRES
-    K3S_WORKER1 --> APP
+    subgraph "Kubernetes Layer"
+        VM1 --> K8S[Kubernetes API Server]
+        VM2 --> K8S
+        VM3 --> K8S
+    end
     
-    LINKERD --> K3S_SERVER
-    LINKERD --> K3S_WORKER1
-    PROXY --> APP
+    subgraph "Platform Services"
+        K8S --> ARGO[ArgoCD<br/>GitOps Controller]
+        K8S --> LINKERD[Linkerd<br/>Service Mesh]
+        K8S --> KEYCLOAK[Keycloak<br/>Identity Provider]
+        K8S --> GITEA[Gitea<br/>Git Server]
+    end
+    
+    subgraph "Applications"
+        ARGO --> APP1[Hello World<br/>Test App]
+        ARGO --> APP2[Rust API<br/>Backend Service]
+        ARGO --> APP3[Guestbook<br/>Sample App]
+    end
 ```
 
 ## Network Architecture
 
 ```mermaid
-graph LR
-    subgraph "Host Network"
-        HOST[Your Machine]
+graph TB
+    subgraph "External Access"
+        USER[User] --> INGRESS[Ingress Controller]
     end
     
-    subgraph "Libvirt Network (192.168.122.0/24)"
-        SERVER[K3s Server<br/>192.168.122.10]
-        WORKER1[K3s Worker 1<br/>192.168.122.11]
-        REGISTRY[Local Registry<br/>192.168.122.100]
-        SERVICES[Offline Services<br/>192.168.122.101-103]
+    subgraph "Kubernetes Cluster"
+        INGRESS --> SVC1[Hello World Service]
+        INGRESS --> SVC2[Rust API Service]
+        INGRESS --> SVC3[Keycloak Service]
+        INGRESS --> SVC4[Gitea Service]
+        INGRESS --> SVC5[ArgoCD Service]
     end
     
-    HOST --> SERVER
-    HOST --> WORKER1
-    HOST --> REGISTRY
-    SERVER --> WORKER1
-    SERVER --> REGISTRY
-    WORKER1 --> REGISTRY
+    subgraph "Service Mesh"
+        SVC1 --> PROXY1[Linkerd Proxy]
+        SVC2 --> PROXY2[Linkerd Proxy]
+        SVC3 --> PROXY3[Linkerd Proxy]
+        SVC4 --> PROXY4[Linkerd Proxy]
+        SVC5 --> PROXY5[Linkerd Proxy]
+    end
+    
+    subgraph "Pods"
+        PROXY1 --> POD1[Hello World Pod]
+        PROXY2 --> POD2[Rust API Pod]
+        PROXY3 --> POD3[Keycloak Pod]
+        PROXY4 --> POD4[Gitea Pod]
+        PROXY5 --> POD5[ArgoCD Pod]
+    end
 ```
 
-## Authentication Flow
+## Data Flow Architecture
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant A as Your App
-    participant K as Keycloak
-    participant K8S as Kubernetes
+    participant User as User
+    participant Ingress as Ingress
+    participant Proxy as Linkerd Proxy
+    participant App as Application
+    participant DB as Database
     
-    U->>A: Access Application
-    A->>K: Redirect to Login
-    U->>K: Login with Credentials
-    K->>A: Return with JWT Token
-    A->>K8S: API Request with JWT
-    K8S->>K: Validate JWT Token
-    K->>K8S: Token Valid
-    K8S->>A: Return Requested Data
-    A->>U: Display Data
+    User->>Ingress: HTTP Request
+    Ingress->>Proxy: Route to Service
+    Proxy->>Proxy: mTLS Handshake
+    Proxy->>App: Forward Request
+    App->>DB: Database Query
+    DB->>App: Return Data
+    App->>Proxy: Response
+    Proxy->>Proxy: mTLS Encryption
+    Proxy->>Ingress: Encrypted Response
+    Ingress->>User: HTTP Response
 ```
 
-## GitOps Pipeline
-
-```mermaid
-graph LR
-    subgraph "Git Repository"
-        MANIFESTS[K8s Manifests]
-        HELM[Helm Charts]
-        ARGO[ArgoCD Config]
-    end
-    
-    subgraph "ArgoCD"
-        APP[Application Controller]
-        SYNC[Sync Engine]
-    end
-    
-    subgraph "K3s Cluster"
-        NS[Namespaces]
-        DEP[Deployments]
-        SVC[Services]
-        ING[Ingress]
-    end
-    
-    MANIFESTS --> APP
-    HELM --> APP
-    ARGO --> APP
-    APP --> SYNC
-    SYNC --> NS
-    SYNC --> DEP
-    SYNC --> SVC
-    SYNC --> ING
-```
-
-## Service Mesh Architecture
+## Security Architecture
 
 ```mermaid
 graph TB
-    subgraph "Linkerd Control Plane"
-        CP[Control Plane]
-        ID[Identity Service]
-        PROXY_INJ[Proxy Injector]
+    subgraph "Authentication Layer"
+        USER[User] --> KEYCLOAK[Keycloak]
+        KEYCLOAK --> JWT[JWT Token]
     end
     
-    subgraph "Data Plane"
-        subgraph "Namespace: default"
-            APP[Your App]
-            APP_PROXY[App Proxy]
-        end
-        
-        subgraph "Namespace: postgres"
-            DB[PostgreSQL]
-            DB_PROXY[DB Proxy]
-        end
-    end
-    
-    CP --> ID
-    CP --> PROXY_INJ
-    PROXY_INJ --> APP_PROXY
-    PROXY_INJ --> DB_PROXY
-    
-    APP --> APP_PROXY
-    DB --> DB_PROXY
-    
-    APP_PROXY --> DB_PROXY
-```
-
-## Component Dependencies
-
-```mermaid
-graph TD
-    subgraph "Infrastructure Layer"
-        VMS[VMs]
-        NET[Network]
-        STORAGE[Storage]
-    end
-    
-    subgraph "Platform Layer"
-        K3S[K3s]
-        DOCKER[Docker]
-        REGISTRY[Registry]
-    end
-    
-    subgraph "Core Services"
-        POSTGRES[PostgreSQL]
-        KEYCLOAK[Keycloak]
-        GITEA[Gitea]
-    end
-    
-    subgraph "Application Layer"
-        RUST_APP[Rust App]
-        ARGOCD[ArgoCD]
-        LINKERD[Linkerd]
-    end
-    
-    VMS --> K3S
-    NET --> K3S
-    STORAGE --> REGISTRY
-    
-    K3S --> POSTGRES
-    K3S --> KEYCLOAK
-    K3S --> GITEA
-    
-    POSTGRES --> RUST_APP
-    KEYCLOAK --> RUST_APP
-    GITEA --> ARGOCD
-    
-    ARGOCD --> RUST_APP
-    LINKERD --> RUST_APP
-```
-
-## Security Model
-
-```mermaid
-graph TB
-    subgraph "Authentication"
-        JWT[JWT Tokens]
-        OAUTH[OAuth 2.0]
-        RBAC[RBAC]
+    subgraph "Authorization Layer"
+        JWT --> API[Rust API]
+        API --> VALIDATE[Token Validation]
     end
     
     subgraph "Network Security"
-        MTLS[mTLS]
-        NP[Network Policies]
-        INGRESS[Ingress Rules]
+        PROXY[Linkerd Proxy] --> MTLS[mTLS Encryption]
+        MTLS --> SERVICE[Service Communication]
     end
     
-    subgraph "Data Security"
-        SECRETS[K8s Secrets]
-        ENCRYPTION[Data Encryption]
-        BACKUP[Backup Encryption]
+    subgraph "Infrastructure Security"
+        TERRAFORM[Terraform] --> SECRETS[Secret Management]
+        ANSIBLE[Ansible] --> CONFIG[Secure Configuration]
     end
-    
-    JWT --> RBAC
-    OAUTH --> JWT
-    RBAC --> NP
-    MTLS --> NP
-    NP --> INGRESS
-    SECRETS --> ENCRYPTION
-    ENCRYPTION --> BACKUP
 ```
 
-## Monitoring and Observability
+## Observability Architecture
 
 ```mermaid
 graph LR
     subgraph "Data Collection"
-        METRICS[Metrics]
-        LOGS[Logs]
-        TRACES[Traces]
+        PROXY[Linkerd Proxy] --> METRICS[Metrics]
+        PROXY --> TRACES[Traces]
+        PROXY --> LOGS[Logs]
     end
     
-    subgraph "Storage"
-        PROMETHEUS[Prometheus]
-        LOKI[Loki]
-        TEMPO[Tempo]
+    subgraph "Processing"
+        METRICS --> PROMETHEUS[Prometheus]
+        TRACES --> JAEGER[Jaeger]
+        LOGS --> LOKI[Loki]
     end
     
     subgraph "Visualization"
-        GRAFANA[Grafana]
-        DASHBOARDS[Dashboards]
-        ALERTS[Alerts]
+        PROMETHEUS --> GRAFANA[Grafana]
+        JAEGER --> GRAFANA
+        LOKI --> GRAFANA
     end
     
-    METRICS --> PROMETHEUS
-    LOGS --> LOKI
-    TRACES --> TEMPO
-    
-    PROMETHEUS --> GRAFANA
-    LOKI --> GRAFANA
-    TEMPO --> GRAFANA
-    
-    GRAFANA --> DASHBOARDS
-    GRAFANA --> ALERTS
+    subgraph "Dashboards"
+        GRAFANA --> DASH1[Service Mesh Dashboard]
+        GRAFANA --> DASH2[Application Dashboard]
+        GRAFANA --> DASH3[Infrastructure Dashboard]
+    end
 ```
-
