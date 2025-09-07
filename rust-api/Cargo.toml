@@ -44,9 +44,12 @@ actix-cors = "0.6"
 # Validation
 validator = { version = "0.16", features = ["derive"] }
 
-# OIDC/JWKS fetch
-reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
-once_cell = "1.19"
+[features]
+default = []
+
+[dependencies.reqwest]
+version = "0.12"
+features = ["json", "rustls-tls", "blocking"]
 
 [dev-dependencies]
 tokio-test = "0.4"
