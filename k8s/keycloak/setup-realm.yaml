@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-setup-realm
+  namespace: keycloak
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kcadm
+          image: quay.io/keycloak/keycloak:24.0.5
+          env:
+            - name: KEYCLOAK_URL
+              value: http://keycloak.keycloak.svc.cluster.local
+            - name: REALM
+              value: lab
+            - name: CLIENT_ID
+              value: lab-api
+            - name: TEST_USER
+              value: tester
+            - name: TEST_PASS
+              value: tester123
+          envFrom:
+            - secretRef:
+                name: keycloak-admin
+          command: ["/bin/bash","-c"]
+          args:
+            - |
+              set -e
+              echo "Waiting for Keycloak..."
+              until /opt/keycloak/bin/kcadm.sh config credentials --server ${KEYCLOAK_URL} \
+                --realm master --user ${KEYCLOAK_ADMIN} --password ${KEYCLOAK_ADMIN_PASSWORD}; do
+                echo "Keycloak not ready yet, retrying..."
+                sleep 5
+              done
+              
+              echo "Creating realm ${REALM}..."
+              /opt/keycloak/bin/kcadm.sh create realms -s realm=${REALM} -s enabled=true
+              
+              echo "Creating client ${CLIENT_ID}..."
+              /opt/keycloak/bin/kcadm.sh create clients -r ${REALM} \
+                -s clientId=${CLIENT_ID} -s enabled=true -s protocol=openid-connect \
+                -s standardFlowEnabled=true -s directAccessGrantsEnabled=true \
+                -s publicClient=true -s redirectUris='["http://localhost:8080/*","http://keycloak.local/*","http://api.k3s-lab.local/*"]'
+              
+              echo "Creating user ${TEST_USER}..."
+              /opt/keycloak/bin/kcadm.sh create users -r ${REALM} -s username=${TEST_USER} -s enabled=true
+              USER_ID=$(/opt/keycloak/bin/kcadm.sh get users -r ${REALM} -q username=${TEST_USER} --fields id | sed -n 's/.*"id" *: *"\([^"]*\)".*/\1/p' | head -n1)
+              if [ -n "${USER_ID}" ]; then
+                /opt/keycloak/bin/kcadm.sh set-password -r ${REALM} --userid ${USER_ID} --new-password ${TEST_PASS}
+                echo "User ${TEST_USER} created with password ${TEST_PASS}"
+              fi
+              
+              echo "Setup complete!"
