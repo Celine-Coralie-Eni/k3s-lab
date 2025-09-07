@@ -1,0 +1,69 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-bootstrap
+  namespace: keycloak
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kcadm
+          image: quay.io/keycloak/keycloak:24.0.5
+          env:
+            - name: KEYCLOAK_URL
+              value: http://keycloak.keycloak.svc.cluster.local
+            - name: REALM
+              value: lab
+            - name: CLIENT_ID
+              value: lab-api
+            - name: CLIENT_SECRET
+              value: lab-secret
+            - name: TEST_USER
+              value: tester
+            - name: TEST_PASS
+              value: tester123
+          envFrom:
+            - secretRef:
+                name: keycloak-admin
+          command: ["/bin/bash","-c"]
+          args:
+            - |
+              set -e
+              echo "Waiting for Keycloak..."
+              until curl -sf ${KEYCLOAK_URL}/health/ready >/dev/null; do sleep 5; done
+              echo "Keycloak is ready. Configuring..."
+
+              /opt/keycloak/bin/kcadm.sh config credentials --server ${KEYCLOAK_URL} \
+                --realm master --user ${KEYCLOAK_ADMIN} --password ${KEYCLOAK_ADMIN_PASSWORD}
+
+              # Create realm if missing
+              if ! /opt/keycloak/bin/kcadm.sh get realms/${REALM} >/dev/null 2>&1; then
+                /opt/keycloak/bin/kcadm.sh create realms -s realm=${REALM} -s enabled=true
+              fi
+
+              # Create client (confidential)
+              if ! /opt/keycloak/bin/kcadm.sh get clients -r ${REALM} -q clientId=${CLIENT_ID} | grep -q '"id"'; then
+                /opt/keycloak/bin/kcadm.sh create clients -r ${REALM} \
+                  -s clientId=${CLIENT_ID} -s enabled=true -s protocol=openid-connect \
+                  -s standardFlowEnabled=true -s directAccessGrantsEnabled=true -s serviceAccountsEnabled=false \
+                  -s publicClient=false -s redirectUris='["http://localhost:8080/*","http://keycloak.local/*"]'
+              fi
+
+              CLIENT_UUID=$(/opt/keycloak/bin/kcadm.sh get clients -r ${REALM} -q clientId=${CLIENT_ID} --fields id | jq -r '.[0].id')
+              if [ -n "${CLIENT_UUID}" ] && [ "${CLIENT_UUID}" != "null" ]; then
+                # Set client secret
+                /opt/keycloak/bin/kcadm.sh update clients/${CLIENT_UUID} -r ${REALM} -s 'secret=${CLIENT_SECRET}' -n || true
+              fi
+
+              # Create test user
+              if ! /opt/keycloak/bin/kcadm.sh get users -r ${REALM} -q username=${TEST_USER} | grep -q '"id"'; then
+                /opt/keycloak/bin/kcadm.sh create users -r ${REALM} -s username=${TEST_USER} -s enabled=true
+                USER_ID=$(/opt/keycloak/bin/kcadm.sh get users -r ${REALM} -q username=${TEST_USER} --fields id | jq -r '.[0].id')
+                /opt/keycloak/bin/kcadm.sh set-password -r ${REALM} --userid ${USER_ID} --new-password ${TEST_PASS}
+              fi
+
+              echo "Bootstrap complete."
+
+
