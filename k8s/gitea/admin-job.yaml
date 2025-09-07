@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gitea-create-admin
+  namespace: gitea
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: setup
+          image: curlimages/curl:8.7.1
+          env:
+            - name: GITEA_URL
+              value: http://gitea.gitea.svc.cluster.local:3000
+            - name: ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: gitea-admin
+                  key: GITEA_ADMIN_USER
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gitea-admin
+                  key: GITEA_ADMIN_PASSWORD
+            - name: ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: gitea-admin
+                  key: GITEA_ADMIN_EMAIL
+          command: ["/bin/sh","-c"]
+          args:
+            - |
+              set -e
+              echo "Waiting for Gitea..."
+              until curl -sf ${GITEA_URL}/api/healthz >/dev/null; do sleep 3; done
+              echo "Creating admin user if not exists..."
+              curl -s -X POST "${GITEA_URL}/user/sign_up" \
+                -H 'Content-Type: application/x-www-form-urlencoded' \
+                --data-urlencode "user_name=${ADMIN_USER}" \
+                --data-urlencode "password=${ADMIN_PASSWORD}" \
+                --data-urlencode "retype=${ADMIN_PASSWORD}" \
+                --data-urlencode "email=${ADMIN_EMAIL}" || true
+              echo "Done."
+
+
