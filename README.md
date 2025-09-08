@@ -12,13 +12,13 @@
 
 This project is a step-by-step journey into modern DevOps. It starts with a simple K3s cluster and grows into a full platform that includes things like:
 
-- **🔐 Zero-Trust Security** with mTLS and OIDC authentication
-- **🚀 GitOps Pipeline** with ArgoCD and automated deployments  
-- **🌐 Service Mesh** with Linkerd for advanced networking
-- **📊 Observability** with real-time metrics and dashboards
-- **🔄 CI/CD** with Gitea Actions and automated testing
+- ** Zero-Trust Security** with mTLS and OIDC authentication
+- ** GitOps Pipeline** with ArgoCD and automated deployments  
+- ** Service Mesh** with Linkerd for advanced networking
+- ** Observability** with real-time metrics and dashboards
+- ** CI/CD** with Gitea Actions and automated testing
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 ```mermaid
 graph TB
@@ -47,7 +47,7 @@ graph TB
     end
 ```
 
-## 🎯 What You'll Build
+##  What You'll Build
 
 ### Core Infrastructure
 - **K3s Cluster**: Lightweight Kubernetes on Multipass VMs
@@ -65,7 +65,7 @@ graph TB
 - **Hello World**: Test application for GitOps pipeline
 - **Guestbook**: Sample application for demonstrations
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - Multipass installed
@@ -113,7 +113,7 @@ kubectl apply -f k8s/test-app/argocd-app.yaml
 kubectl get applications -n argocd
 ```
 
-## 📊 GitOps Pipeline Flow
+##  GitOps Pipeline Flow
 
 ```mermaid
 sequenceDiagram
@@ -133,7 +133,7 @@ sequenceDiagram
     Argo->>Dev: Notify success
 ```
 
-## 🔐 Authentication Flow
+##  Authentication Flow
 
 ```mermaid
 sequenceDiagram
@@ -153,7 +153,7 @@ sequenceDiagram
     API->>App: Return data
 ```
 
-## 🛠️ Technology Stack
+##  Technology Stack
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
