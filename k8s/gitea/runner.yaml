@@ -22,37 +22,53 @@ spec:
         - name: GITEA_INSTANCE_URL
           value: "http://gitea.gitea.svc.cluster.local:3000"
         - name: GITEA_RUNNER_REGISTRATION_TOKEN
-          value: "dummy-token"  # We'll update this
+          valueFrom:
+            secretKeyRef:
+              name: gitea-runner
+              key: GITEA_RUNNER_REGISTRATION_TOKEN
         - name: GITEA_RUNNER_NAME
           value: "k8s-runner"
         command: ["sh", "-c"]
         args:
         - |
+          set -e
+          
           # Wait for Gitea to be ready
           until wget -q --spider http://gitea.gitea.svc.cluster.local:3000/api/v1/version; do
             echo "Waiting for Gitea..."
             sleep 5
           done
-          
-          # Get registration token using wget instead of curl
-          TOKEN=$(wget -qO- "http://gitea.gitea.svc.cluster.local:3000/api/v1/actions/runners/registration-token" \
-            --http-user=admin --http-password=admin123 | jq -r '.token')
-          
-          if [ "$TOKEN" != "null" ] && [ -n "$TOKEN" ]; then
-            echo "Got token: $TOKEN"
-            # Register runner
-            /usr/local/bin/act_runner register \
-              --instance http://gitea.gitea.svc.cluster.local:3000 \
-              --token $TOKEN \
-              --name k8s-runner \
-              --labels ubuntu-latest:docker://node:16-bullseye
-          else
+
+          # Ensure required tools are present (image is Alpine-based)
+          if ! command -v curl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+            echo "Installing curl and jq..."
+            apk add --no-cache curl jq >/dev/null
+          fi
+
+          # Use provided token if available; otherwise try API as admin
+          TOKEN="${GITEA_RUNNER_REGISTRATION_TOKEN:-}"
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            TOKEN=$(curl -fsSL -u admin:admin123 \
+              http://gitea.gitea.svc.cluster.local:3000/api/v1/actions/runners/registration-token \
+              | jq -r '.token' || true)
+          fi
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
             echo "Failed to get registration token"
             exit 1
           fi
-          
+
+          echo "Got token: $TOKEN"
+
+          # Register runner
+          /usr/local/bin/act_runner register \
+            --instance http://gitea.gitea.svc.cluster.local:3000 \
+            --token "$TOKEN" \
+            --name k8s-runner \
+            --labels ubuntu-latest:docker://node:16-bullseye
+
           # Start runner
-          /usr/local/bin/act_runner daemon
+          exec /usr/local/bin/act_runner daemon
         resources:
           requests:
             memory: "256Mi"
@@ -63,8 +79,28 @@ spec:
         volumeMounts:
         - name: runner-data
           mountPath: /data
+        - name: docker-run
+          mountPath: /var/run
+        - name: docker-graph
+          mountPath: /var/lib/docker
+      - name: dind
+        image: docker:24-dind
+        securityContext:
+          privileged: true
+        env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+        volumeMounts:
+        - name: docker-run
+          mountPath: /var/run
+        - name: docker-graph
+          mountPath: /var/lib/docker
       volumes:
       - name: runner-data
+        emptyDir: {}
+      - name: docker-run
+        emptyDir: {}
+      - name: docker-graph
         emptyDir: {}
       restartPolicy: Always
 ---
