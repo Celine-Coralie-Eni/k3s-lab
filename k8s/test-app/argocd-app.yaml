@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/Celine-Coralie-Eni/k3s-lab.git
+    repoURL: http://gitea.gitea.svc.cluster.local:3000/gitea-admin/k3s-lab.git
     targetRevision: HEAD
     path: k8s/test-app
   destination:
