@@ -8,15 +8,14 @@
 [![ArgoCD](https://img.shields.io/badge/ArgoCD-GitOps-red?logo=argocd)](https://argoproj.github.io/cd/)
 [![Keycloak](https://img.shields.io/badge/Keycloak-Auth-orange?logo=keycloak)](https://www.keycloak.org/)
 
-## 📖 The Epic Story
-
+## Procedure
 This project is a step-by-step journey into modern DevOps. It starts with a simple K3s cluster and grows into a full platform that includes things like:
 
-- ** Zero-Trust Security** with mTLS and OIDC authentication
-- ** GitOps Pipeline** with ArgoCD and automated deployments  
-- ** Service Mesh** with Linkerd for advanced networking
-- ** Observability** with real-time metrics and dashboards
-- ** CI/CD** with Gitea Actions and automated testing
+- **Zero-Trust Security** with mTLS and OIDC authentication
+- **GitOps Pipeline** with ArgoCD and automated deployments  
+- **Service Mesh** with Linkerd for advanced networking
+- **Observability** with real-time metrics and dashboards
+- **CI/CD** with Gitea Actions and automated testing
 
 ## Architecture Overview
 
@@ -168,34 +167,34 @@ sequenceDiagram
 | **Database** | PostgreSQL | Data persistence |
 | **Monitoring** | Linkerd Viz | Service mesh observability |
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 k3s-lab/
-├── 📁 terraform/           # Infrastructure as Code
+├──  terraform/           # Infrastructure as Code
 │   ├── main.tf
 │   ├── variables.tf
 │   └── outputs.tf
-├── 📁 ansible/             # Configuration management
+├──  ansible/             # Configuration management
 │   ├── site.yml
 │   ├── inventory
 │   └── roles/
-├── 📁 k8s/                # Kubernetes manifests
+├──  k8s/                # Kubernetes manifests
 │   ├── argocd/           # GitOps platform
 │   ├── linkerd/          # Service mesh
 │   ├── keycloak/         # Authentication
 │   ├── gitea/            # Git server
 │   └── test-app/         # Sample applications
-├── 📁 rust-api/          # Rust application
+├──  rust-api/          # Rust application
 │   ├── src/
 │   ├── Cargo.toml
 │   └── Dockerfile
-└── 📁 scripts/           # Automation scripts
+└──  scripts/           # Automation scripts
     ├── deploy-multipass-infrastructure.sh
     └── verify-setup.sh
 ```
 
-## 🎭 YAML Jokes & Comic Relief
+##  YAML Jokes & Comic Relief
 
 > *"Why did the YAML file go to therapy? Because it had too many indentation issues!"*
 
@@ -237,7 +236,7 @@ mTLS whispers secrets
 Linkerd guards the way
 ```
 
-## 🔄 Idempotence: The Art of Running Twice
+##  Idempotence: The Art of Running Twice
 
 This entire setup is **idempotent** - you can run it multiple times and get the same result. Here's the proof:
 
@@ -271,7 +270,7 @@ kubectl apply -f k8s/argocd/  # No changes needed
 kubectl apply -f k8s/argocd/  # Still no changes needed
 ```
 
-## 🎯 Day-by-Day Journey
+##  Day-by-Day Journey
 
 | Day | Focus | Achievement |
 |-----|-------|-------------|
@@ -284,7 +283,7 @@ kubectl apply -f k8s/argocd/  # Still no changes needed
 | **11** | Service Mesh | Linkerd with mTLS |
 | **12** | Documentation | This epic README |
 
-## 🚨 Troubleshooting
+##  Troubleshooting
 
 ### Common Issues
 
@@ -307,7 +306,7 @@ repoURL: http://gitea.gitea.svc.cluster.local:3000/gitea-admin/infra.git
 kubectl annotate namespace test-app linkerd.io/inject=enabled
 ```
 
-## 🤝 Contributing
+##  Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -315,11 +314,11 @@ kubectl annotate namespace test-app linkerd.io/inject=enabled
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📜 License
+##  License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - **K3s Team** for the lightweight Kubernetes distribution
 - **Linkerd Team** for the amazing service mesh
@@ -338,7 +337,7 @@ Having issues? Here are your options:
 
 ---
 
-## 🎉 The Epic Conclusion
+##  Conclusion
 
 You've just built a **production-ready Kubernetes platform** with:
 - ✅ **Infrastructure as Code** (Terraform + Ansible)
@@ -348,6 +347,3 @@ You've just built a **production-ready Kubernetes platform** with:
 - ✅ **Observability** (Linkerd Viz)
 - ✅ **High-Performance API** (Rust + Actix-web)
 
-**This is not just a lab - it's a masterpiece of modern DevOps!** 🚀
-
-*"From zero to hero, one YAML file at a time."* ✨
