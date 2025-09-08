@@ -10,7 +10,7 @@
 
 ## 📖 The Epic Story
 
-This repository chronicles an epic journey through modern DevOps practices, building a production-ready Kubernetes lab from scratch. What started as a simple K3s cluster evolved into a comprehensive platform featuring:
+This project is a step-by-step journey into modern DevOps. It starts with a simple K3s cluster and grows into a full platform that includes things like:
 
 - **🔐 Zero-Trust Security** with mTLS and OIDC authentication
 - **🚀 GitOps Pipeline** with ArgoCD and automated deployments  
