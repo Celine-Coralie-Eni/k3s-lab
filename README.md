@@ -1,6 +1,6 @@
 # 🚀 K3s Lab: The Epic Kubernetes Journey
 
-> *"From zero to hero: A complete Kubernetes lab with GitOps, Service Mesh, and Authentication"*
+> *A complete Kubernetes lab with GitOps, Service Mesh, and Authentication*
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.28-blue?logo=kubernetes)](https://kubernetes.io/)
 [![K3s](https://img.shields.io/badge/K3s-Lightweight-green?logo=kubernetes)](https://k3s.io/)
