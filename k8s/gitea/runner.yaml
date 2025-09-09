@@ -28,6 +28,8 @@ spec:
               key: GITEA_RUNNER_REGISTRATION_TOKEN
         - name: GITEA_RUNNER_NAME
           value: "k8s-runner"
+        - name: DOCKER_HOST
+          value: "unix:///var/run/docker.sock"
         command: ["sh", "-c"]
         args:
         - |
@@ -38,12 +40,21 @@ spec:
             echo "Waiting for Gitea..."
             sleep 5
           done
-
+ 
           # Ensure required tools are present (image is Alpine-based)
-          if ! command -v curl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
-            echo "Installing curl and jq..."
-            apk add --no-cache curl jq >/dev/null
+          if ! command -v curl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1 || ! command -v docker >/dev/null 2>&1; then
+            echo "Installing curl, jq, docker-cli..."
+            apk add --no-cache curl jq docker-cli >/dev/null
           fi
+ 
+          # Point to docker-in-docker
+          export DOCKER_HOST=unix:///var/run/docker.sock
+
+          # Wait for Docker daemon
+          until docker info >/dev/null 2>&1; do
+            echo "Waiting for Docker daemon..."
+            sleep 3
+          done
 
           # Use provided token if available; otherwise try API as admin
           TOKEN="${GITEA_RUNNER_REGISTRATION_TOKEN:-}"
@@ -52,21 +63,21 @@ spec:
               http://gitea.gitea.svc.cluster.local:3000/api/v1/actions/runners/registration-token \
               | jq -r '.token' || true)
           fi
-
+ 
           if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
             echo "Failed to get registration token"
             exit 1
           fi
-
+ 
           echo "Got token: $TOKEN"
-
+ 
           # Register runner
           /usr/local/bin/act_runner register \
             --instance http://gitea.gitea.svc.cluster.local:3000 \
             --token "$TOKEN" \
             --name k8s-runner \
             --labels ubuntu-latest:docker://node:16-bullseye
-
+ 
           # Start runner
           exec /usr/local/bin/act_runner daemon
         resources:
