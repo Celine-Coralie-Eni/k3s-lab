@@ -1,12 +1,9 @@
-# 🚀 K3s Lab: The Epic Kubernetes Journey
+# K3s Lab
 
 > *A complete Kubernetes lab with GitOps, Service Mesh, and Authentication*
+This repo holds a small Kubernetes lab that runs fully offline. It uses K3s on two VMs, a local Gitea for Git, Argo CD for GitOps, Linkerd for the service mesh, and Keycloak for auth.
 
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.28-blue?logo=kubernetes)](https://kubernetes.io/)
-[![K3s](https://img.shields.io/badge/K3s-Lightweight-green?logo=kubernetes)](https://k3s.io/)
-[![Linkerd](https://img.shields.io/badge/Linkerd-Service%20Mesh-purple)](https://linkerd.io/)
-[![ArgoCD](https://img.shields.io/badge/ArgoCD-GitOps-red?logo=argocd)](https://argoproj.github.io/cd/)
-[![Keycloak](https://img.shields.io/badge/Keycloak-Auth-orange?logo=keycloak)](https://www.keycloak.org/)
+Day 12 was about writing the story and the docs. This README keeps it simple and to the point.
 
 ## Procedure
 This project is a step-by-step journey into modern DevOps. It starts with a simple K3s cluster and grows into a full platform that includes things like:
@@ -18,32 +15,17 @@ This project is a step-by-step journey into modern DevOps. It starts with a simp
 - **CI/CD** with Gitea Actions and automated testing
 
 ## Architecture Overview
+## Architecture (short version)
 
 ```mermaid
 graph TB
-    subgraph "Infrastructure Layer"
-        TF[Terraform] --> ANS[Ansible]
-        ANS --> K3S[K3s Cluster]
-    end
-    
-    subgraph "Platform Layer"
-        K3S --> ARGO[ArgoCD]
-        K3S --> LINKERD[Linkerd Service Mesh]
-        K3S --> KEYCLOAK[Keycloak Auth]
-        K3S --> GITEA[Gitea Git Server]
-    end
-    
-    subgraph "Application Layer"
-        ARGO --> APP1[Hello World App]
-        ARGO --> APP2[Rust API]
-        ARGO --> APP3[Guestbook App]
-    end
-    
-    subgraph "Security & Observability"
-        LINKERD --> MTLS[mTLS Encryption]
-        LINKERD --> VIZ[Linkerd Viz]
-        KEYCLOAK --> JWT[JWT Tokens]
-    end
+  TF[Terraform] --> ANS[Ansible]
+  ANS --> K3S[K3s]
+  K3S --> ARGO[Argo CD]
+  K3S --> GITEA[Gitea]
+  K3S --> LINK[Linkerd]
+  K3S --> KC[Keycloak]
+  ARGO --> APP[Apps]
 ```
 
 ##  What You'll Build
@@ -85,87 +67,98 @@ terraform apply
 
 # Configure with Ansible
 ansible-playbook -i inventory ansible/site.yml
+## Pipeline (what happens when you push)
+
+```mermaid
+sequenceDiagram
+  participant Dev as Dev
+  participant Git as Gitea
+  participant Argo as Argo CD
+  participant K8s as K8s
+  Dev->>Git: push
+  Argo->>Git: check repo
+  Argo->>K8s: apply manifests
+  K8s->>Dev: app updated
 ```
 
-### 2. Platform Deployment
-```bash
-# Deploy ArgoCD
-kubectl apply -f k8s/argocd/
+## Auth flow (very basic)
 
-# Deploy Linkerd
+```mermaid
+sequenceDiagram
+  participant User
+  participant App
+  participant IdP as Keycloak
+  User->>App: open app
+  App->>IdP: login
+  IdP->>App: token
+  App->>User: content
+```
+
+## Infra story: Terraform → Ansible → K3s
+
+- Terraform creates the VMs (idempotent: plan shows no changes on reruns).
+- Ansible configures the hosts and installs K3s (idempotent tasks).
+- K3s runs the cluster. Platform pieces (Argo CD, Linkerd, Keycloak, Gitea) are applied as YAML.
+
+## Idempotence note (proof in plain words)
+
+- Terraform: a second `terraform apply` reports “no changes”.
+- Ansible: a second run reports tasks as “ok” not “changed”.
+- Kubernetes: `kubectl apply -f ...` prints “unchanged” on reruns.
+
+## How to reproduce from scratch
+
+Prereqs: Multipass, Terraform, Ansible, kubectl, and a Linux/macOS shell.
+
+1) Create VMs and base setup
+
+```bash
+cd terraform
+terraform init && terraform apply
+```
+
+2) Configure and install K3s
+
+```bash
+cd ../ansible
+ansible-playbook -i inventory k3s-setup.yml
+```
+
+3) Install platform
+
+```bash
+kubectl apply -f k8s/argocd/
+kubectl apply -f k8s/gitea/
+kubectl apply -f k8s/keycloak/
 linkerd install | kubectl apply -f -
 linkerd viz install | kubectl apply -f -
-
-# Deploy Keycloak
-kubectl apply -f k8s/keycloak/
-
-# Deploy Gitea
-kubectl apply -f k8s/gitea/
 ```
 
-### 3. Application Deployment
-```bash
-# Deploy via GitOps
-kubectl apply -f k8s/test-app/argocd-app.yaml
+4) App by GitOps
 
-# Watch the magic happen
-kubectl get applications -n argocd
+```bash
+kubectl apply -f k8s/test-app/argocd-app.yaml
+kubectl -n argocd get applications
 ```
 
 ##  GitOps Pipeline Flow
+## What’s in here
 
-```mermaid
-sequenceDiagram
-    participant Dev as Developer
-    participant Git as Gitea
-    participant Argo as ArgoCD
-    participant K8s as Kubernetes
-    participant Mesh as Linkerd
-    
-    Dev->>Git: Push code changes
-    Git->>Argo: Webhook trigger
-    Argo->>Argo: Detect changes
-    Argo->>K8s: Deploy manifests
-    K8s->>Mesh: Inject sidecars
-    Mesh->>Mesh: Enable mTLS
-    K8s->>Argo: Update status
-    Argo->>Dev: Notify success
-```
+- terraform/: VM definitions
+- ansible/: provisioning and K3s setup
+- k8s/: YAML for Argo CD, Gitea, Keycloak, test app
+- rust-api/: example Rust service
+- scripts/: helper scripts
 
 ##  Authentication Flow
+## Linkerd in one sentence
 
-```mermaid
-sequenceDiagram
-    participant User as User
-    participant App as Application
-    participant Keycloak as Keycloak
-    participant API as Rust API
-    
-    User->>App: Access application
-    App->>Keycloak: Redirect to login
-    Keycloak->>User: Show login form
-    User->>Keycloak: Enter credentials
-    Keycloak->>App: Return JWT token
-    App->>API: API call with JWT
-    API->>Keycloak: Validate JWT
-    Keycloak->>API: Return validation
-    API->>App: Return data
-```
+Linkerd is a service mesh. We inject a small proxy into app pods so we get mTLS and traffic metrics without changing the app code.
 
 ##  Technology Stack
+## YAML jokes (short break)
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| **Orchestration** | K3s | Lightweight Kubernetes |
-| **Infrastructure** | Terraform | IaC for VM provisioning |
-| **Configuration** | Ansible | Automation and setup |
-| **GitOps** | ArgoCD | Continuous deployment |
-| **Service Mesh** | Linkerd | mTLS and observability |
-| **Authentication** | Keycloak | Identity management |
-| **Git Server** | Gitea | Self-hosted Git with Actions |
-| **API Framework** | Rust + Actix-web | High-performance API |
-| **Database** | PostgreSQL | Data persistence |
-| **Monitoring** | Linkerd Viz | Service mesh observability |
+YAML breaks when spaces are wrong. If something fails for no reason, check indentation first.
 
 ##  Project Structure
 
@@ -195,21 +188,21 @@ k3s-lab/
 ```
 
 ##  YAML Jokes & Comic Relief
+## Day 12: Write Your Epic
 
-> *"Why did the YAML file go to therapy? Because it had too many indentation issues!"*
+- README written in plain language.
+- Three mermaid diagrams added: architecture, pipeline, and auth.
+- The infra story is spelled out: Terraform → Ansible → K3s.
+- Idempotence is explained with simple proofs.
+- A how‑to guide shows how to rebuild the lab from zero.
 
-### The Great YAML Indentation War
-```yaml
-# ❌ This will haunt your dreams
-apiVersion: v1
-kind: Pod
-metadata:
-name: my-pod  # Missing indentation!
-spec:
-  containers:
-  - name: nginx
-    image: nginx
-```
+## Troubleshooting quick picks
+
+- Argo CD cannot sync: use the in‑cluster Gitea URL and add a repo secret.
+- Ingress has no IP: install MetalLB or use NodePort/port‑forward.
+- Linkerd not injecting: `kubectl annotate namespace <ns> linkerd.io/inject=enabled` and restart the deployment.
+
+## License
 
 ```yaml
 # ✅ This is the way
@@ -347,3 +340,4 @@ You've just built a **production-ready Kubernetes platform** with:
 - ✅ **Observability** (Linkerd Viz)
 - ✅ **High-Performance API** (Rust + Actix-web)
 
+MIT

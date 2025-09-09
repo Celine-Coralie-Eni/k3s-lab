@@ -24,10 +24,10 @@ spec:
     spec:
       containers:
       - name: hello-world
-        image: localhost:5000/hello-world-app:latest
+        image: nginx:alpine
         imagePullPolicy: Always
         ports:
-        - containerPort: 8000
+        - containerPort: 80
         env:
         - name: RUST_LOG
           value: "info"
@@ -38,7 +38,7 @@ spec:
         - --oidc-issuer-url=http://keycloak.keycloak.svc.cluster.local/realms/lab
         - --email-domain=*
         - --http-address=0.0.0.0:4180
-        - --upstream=http://localhost:8000
+        - --upstream=http://localhost:80
         - --cookie-secure=false
         - --cookie-refresh=1h
         - --cookie-name=_oauth2_proxy
