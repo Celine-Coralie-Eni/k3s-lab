@@ -14,6 +14,8 @@ spec:
     metadata:
       labels:
         app: gitea-runner
+      annotations:
+        linkerd.io/inject: disabled
     spec:
       containers:
       - name: runner
@@ -29,7 +31,7 @@ spec:
         - name: GITEA_RUNNER_NAME
           value: "k8s-runner"
         - name: DOCKER_HOST
-          value: "unix:///var/run/docker.sock"
+          value: "unix:///var/run/dind/docker.sock"
         command: ["sh", "-c"]
         args:
         - |
@@ -47,8 +49,8 @@ spec:
             apk add --no-cache curl jq docker-cli >/dev/null
           fi
  
-          # Point to docker-in-docker
-          export DOCKER_HOST=unix:///var/run/docker.sock
+          # Point to docker-in-docker (TCP)
+          export DOCKER_HOST=tcp://localhost:2375
 
           # Wait for Docker daemon
           until docker info >/dev/null 2>&1; do
@@ -90,8 +92,8 @@ spec:
         volumeMounts:
         - name: runner-data
           mountPath: /data
-        - name: docker-run
-          mountPath: /var/run
+        - name: docker-sock
+          mountPath: /var/run/dind
         - name: docker-graph
           mountPath: /var/lib/docker
       - name: dind
@@ -101,15 +103,18 @@ spec:
         env:
         - name: DOCKER_TLS_CERTDIR
           value: ""
+        command: ["dockerd-entrypoint.sh"]
+        args:
+        - "--host=unix:///var/run/dind/docker.sock"
         volumeMounts:
-        - name: docker-run
-          mountPath: /var/run
+        - name: docker-sock
+          mountPath: /var/run/dind
         - name: docker-graph
           mountPath: /var/lib/docker
       volumes:
       - name: runner-data
         emptyDir: {}
-      - name: docker-run
+      - name: docker-sock
         emptyDir: {}
       - name: docker-graph
         emptyDir: {}
